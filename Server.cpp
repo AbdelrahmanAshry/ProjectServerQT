@@ -34,7 +34,8 @@ int main() {
         server.setPort(port);
 
         // install Ctrl+C handler to stop gracefully
-        g_server_ptr = &server;
+        g_server_ptr = &server; // polymorphic pointer
+        
         std::signal(SIGINT, handle_sigint);
 
         server.start();
