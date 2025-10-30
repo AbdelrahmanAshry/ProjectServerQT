@@ -1,12 +1,38 @@
-#include "tcp_socket.h"
+#include "udp_socket.h"
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
 #include <iostream>
 
+// Helper to dup fd safely
+static int dup_fd_or_negone_udp(int fd) {
+    if (fd <= 0) return -1;
+    int d = dup(fd);
+    return (d >= 0) ? d : -1;
+}
+
 UDPSocket::UDPSocket(){ }
-UDPSocket::~UDPSocket(){ shutdownSocket(); } 
+UDPSocket::~UDPSocket(){ shutdown(); } 
+
+// Copy ctor duplicates underlying descriptors
+UDPSocket::UDPSocket(const UDPSocket& other)
+    : connFd(dup_fd_or_negone_udp(other.connFd)),
+      listenFd(dup_fd_or_negone_udp(other.listenFd))
+{
+}
+
+// Copy assignment: close existing then duplicate
+UDPSocket& UDPSocket::operator=(const UDPSocket& other) {
+    if (this == &other) return *this;
+
+    if (connFd > 0) { close(connFd); connFd = -1; }
+    if (listenFd > 0) { close(listenFd); listenFd = -1; }
+
+    connFd = dup_fd_or_negone_udp(other.connFd);
+    listenFd = dup_fd_or_negone_udp(other.listenFd);
+    return *this;
+}
 
 void UDPSocket::waitForConnect(int port){
     listenFd = socket(AF_INET, SOCK_DGRAM, 0);

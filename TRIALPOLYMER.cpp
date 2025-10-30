@@ -14,10 +14,15 @@ class Square{
 //rectangle 
 class Rectangle :public  Square
 {
+protected:
+
 private:
     int y;
 public:
-    Rectangle(int _x,int _y):Square(_x){y=_y;}
+    Rectangle(int _x,int _y):Square(_x){y=_y; cout<<"Rectangle PARAMETERIZED 1 \n";}
+    Rectangle(int _x):Square(_x){y=5;cout<<"Rectangle PArmater input 2\n";  }
+    Rectangle():Square(4){y=2;cout<<"Rectangle default \n";}
+    
     void setY(int _y){y=_y;}
     int getY()const{return y;}
     void print() const{cout<<"Rectangle \n";}    
@@ -25,7 +30,6 @@ public:
 };
 class Foo :public  Square
 {
-
 public:
     Square::Square;
     void print() const{cout<<"Foo \n";}    
@@ -39,8 +43,11 @@ int main ()
 {
     Square s(7);
     Rectangle r(2,4);
+    
 //bound at compile time to the parent functions
-//solve by adding virtual only in base class so it is now overriden
+//sol/ve by adding virtual only in base class so it is now overriden
+    //Rectangle r2(4);
+    //Rectangle r3;
     foo(r);
     Square * Sptr=&r;
     Sptr->print();

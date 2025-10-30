@@ -5,8 +5,37 @@
 #include <cstring>
 #include <iostream>
 
+// Helper to dup fd safely
+static int dup_fd_or_negone(int fd) {
+    if (fd <= 0) return -1;
+    int d = dup(fd);
+    return (d >= 0) ? d : -1;
+}
+
 TCPSocket::TCPSocket(){ }
-TCPSocket::~TCPSocket(){ shutdownSocket(); } 
+TCPSocket::~TCPSocket(){ shutdown(); } 
+
+// Copy ctor: duplicate underlying file descriptors (if any)
+TCPSocket::TCPSocket(const TCPSocket& other)
+    : connFd(dup_fd_or_negone(other.connFd)),
+      listenFd(dup_fd_or_negone(other.listenFd))
+{
+    // copy constructed
+}
+
+// Copy assignment: close existing fds, duplicate from other
+TCPSocket& TCPSocket::operator=(const TCPSocket& other) {
+    if (this == &other) return *this;
+
+    // close existing
+    if (connFd > 0) { close(connFd); connFd = -1; }
+    if (listenFd > 0) { close(listenFd); listenFd = -1; }
+
+    // duplicate other's fds
+    connFd = dup_fd_or_negone(other.connFd);
+    listenFd = dup_fd_or_negone(other.listenFd);
+    return *this;
+}
 
 void TCPSocket::waitForConnect(int port){
     listenFd = socket(AF_INET, SOCK_STREAM, 0);

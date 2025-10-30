@@ -1,6 +1,6 @@
 #ifndef TCP_SOCKET_H
 #define TCP_SOCKET_H
-#include "socket.h"
+#include "Socket.h"
 
 class TCPSocket : public Socket
 {
@@ -10,14 +10,18 @@ private:
 public:
     TCPSocket();
     ~TCPSocket();
-    void waitForConnect(int port) = 0;
-    void connect(const std::string &host, int port) = 0;
-    unsigned int send(const std::string &msg, const sockaddr_in* dest = nullptr) = 0;
-    unsigned int receive(std::string &out, sockaddr_in* src = nullptr) = 0;
-    void shutdown() = 0;
-    bool isTCP() const = 0;
+
+    // Rule of Three: copy ctor + copy assignment (destructor already present)
+    TCPSocket(const TCPSocket& other);
+    TCPSocket& operator=(const TCPSocket& other);
+
+    // concrete overrides (implemented in tcp_socket.cpp)
+    void waitForConnect(int port) override;
+    void connect(const std::string &host, int port) override;
+    unsigned int send(const std::string &msg, const sockaddr_in* dest = nullptr) override;
+    unsigned int receive(std::string &out, sockaddr_in* src = nullptr) override;
+    void shutdown() override;
+    bool isTCP() const override { return true; }
 };
-
-
 
 #endif

@@ -23,23 +23,29 @@ int main() {
         std::cout << "Port (default 8080): ";
         if (!(std::cin >> port)) port = 8080;
 
+        // use static socket instances (no dynamic allocation)
+        static TCPSocket tcpSock;
+        static UDPSocket udpSock;
+
         Socket* sock = nullptr;
+        bool takeOwnership = false; // we created static objects; Channel should NOT delete them
         if (choice == 1) {
-            sock = new TCPSocket();
+            sock = &tcpSock;
         } else {
-            sock = new UDPSocket();
+            sock = &udpSock;
         }
 
-        ServerChannel server(sock); // Channel takes ownership of sock
+        // construct ServerChannel with ownership=false so Channel won't delete static socket
+        ServerChannel server(sock, /*via Channel ctor*/ takeOwnership);
         server.setPort(port);
 
         // install Ctrl+C handler to stop gracefully
         g_server_ptr = &server; // polymorphic pointer
-        
         std::signal(SIGINT, handle_sigint);
 
         server.start();
         std::cout << "[Main] Server started on port " << port << ". Press Ctrl+C to stop.\n";
+        std::cout << "[Note] server sockets bind to INADDR_ANY (all local interfaces). Use 127.0.0.1 to connect from localhost.\n";
 
         // Single-threaded loop: call tick() every 1 second
         while (server.getState() == ServerChannel::RUNNING) {
