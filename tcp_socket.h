@@ -1,27 +1,26 @@
 #ifndef TCP_SOCKET_H
 #define TCP_SOCKET_H
 #include "Socket.h"
+#include <boost/asio.hpp>
+#include <string>
+#include <memory>
 
-class TCPSocket : public Socket
-{
+class TCPSocket : public Socket {
 private:
-    int connFd{-1}; // client or accepted socket
-    int listenFd{-1};
+    boost::asio::io_context io;
+    std::unique_ptr<boost::asio::ip::tcp::socket> socket;
+    std::unique_ptr<boost::asio::ip::tcp::acceptor> acceptor;
+
 public:
     TCPSocket();
-    ~TCPSocket();
+    ~TCPSocket() ;
+    bool isConnectionOriented() const override { return true; } 
 
-    // Rule of Three: copy ctor + copy assignment (destructor already present)
-    TCPSocket(const TCPSocket& other);
-    TCPSocket& operator=(const TCPSocket& other);
-
-    // concrete overrides (implemented in tcp_socket.cpp)
-    void waitForConnect(int port) override;
-    void connect(const std::string &host, int port) override;
-    unsigned int send(const std::string &msg, const sockaddr_in* dest = nullptr) override;
-    unsigned int receive(std::string &out, sockaddr_in* src = nullptr) override;
-    void shutdown() override;
-    bool isTCP() const override { return true; }
+   // bool isConnectionOriented() ;
+    void waitForConnect(int port) ;
+    void connectToServer(const std::string& host, int port) ;
+    unsigned int send(const std::string& msg) ;
+    unsigned int receive(std::string& out) ;
+    void shutdown() ;
 };
-
 #endif

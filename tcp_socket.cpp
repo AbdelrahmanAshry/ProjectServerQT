@@ -1,88 +1,70 @@
+// tcp_socket.cpp
 #include "tcp_socket.h"
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <cstring>
 #include <iostream>
 
-// Helper to dup fd safely
-static int dup_fd_or_negone(int fd) {
-    if (fd <= 0) return -1;
-    int d = dup(fd);
-    return (d >= 0) ? d : -1;
+using boost::asio::ip::tcp;
+
+TCPSocket::TCPSocket()
+    : socket(std::make_unique<tcp::socket>(io)) {}
+
+TCPSocket::~TCPSocket() {
+    shutdown();
 }
+//bool TCPSocket::isConnectionOriented(){    return true; }
 
-TCPSocket::TCPSocket(){ }
-TCPSocket::~TCPSocket(){ shutdown(); } 
-
-// Copy ctor: duplicate underlying file descriptors (if any)
-TCPSocket::TCPSocket(const TCPSocket& other)
-    : connFd(dup_fd_or_negone(other.connFd)),
-      listenFd(dup_fd_or_negone(other.listenFd))
-{
-    // copy constructed
-}
-
-// Copy assignment: close existing fds, duplicate from other
-TCPSocket& TCPSocket::operator=(const TCPSocket& other) {
-    if (this == &other) return *this;
-
-    // close existing
-    if (connFd > 0) { close(connFd); connFd = -1; }
-    if (listenFd > 0) { close(listenFd); listenFd = -1; }
-
-    // duplicate other's fds
-    connFd = dup_fd_or_negone(other.connFd);
-    listenFd = dup_fd_or_negone(other.listenFd);
-    return *this;
-}
-
-void TCPSocket::waitForConnect(int port){
-    listenFd = socket(AF_INET, SOCK_STREAM, 0);
-    int opt=1; 
-    setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));//different ports better
-    struct sockaddr_in addr={0};
-    addr.sin_family=AF_INET;
-    addr.sin_port=htons(port);//Bind to Port 
-    addr.sin_addr.s_addr=INADDR_ANY;
-
-    bind(listenFd,(struct sockaddr*)&addr,sizeof(addr));
-    std::cout<<"TCP Socket created \n";
-
-    listen(listenFd,3);
-    std::cout<<"TCP listening "<<port<<"\n";
-
-    struct sockaddr_in cli={0};
-    socklen_t len=sizeof(cli);
-    connFd = accept(listenFd,(sockaddr*)&cli,&len);
-    std::cout<<"TCP accepted\n";
-}
-void TCPSocket::connect(const std::string &host,int port){
-    connFd =socket(AF_INET, SOCK_STREAM, 0);
-    sockaddr_in serv{};
-    serv.sin_family=AF_INET;
-    serv.sin_port=htons(port);
-    inet_pton(AF_INET, host.c_str(), &serv.sin_addr);
-    connect(connFd,(sockaddr*)&serv,sizeof(serv));//more than 0 means success
-    std::cout<<"TCP connected to "<<host<<":"<<port<<"\n";
-}
-void TCPSocket::shutdown(){
-    if(connFd>0){  
-        close(connFd); 
-        connFd=-1; 
-    }
-    if(listenFd>0){ 
-        close(listenFd); 
-        listenFd=-1; 
+void TCPSocket::waitForConnect(int port) {
+    try {
+        tcp::endpoint endpoint(tcp::v4(), port);
+        acceptor = std::make_unique<tcp::acceptor>(io, endpoint);
+        std::cout << "[TCP] Waiting for client on port " << port << "...\n";
+        acceptor->accept(*socket);
+        std::cout << "[TCP] Client connected!\n";
+    } catch (std::exception& e) {
+        std::cerr << "[TCP Error] " << e.what() << std::endl;
     }
 }
-unsigned int TCPSocket::send(const std::string &msg,const sockaddr_in*){
-    return send(connFd, msg.data(), msg.size(), 0);
+
+void TCPSocket::connectToServer(const std::string& host, int port) {
+    try {
+        tcp::resolver resolver(io);
+        auto endpoints = resolver.resolve(host, std::to_string(port));
+        boost::asio::connect(*socket, endpoints);
+        std::cout << "[TCP] Connected to " << host << ":" << port << "\n";
+    } catch (std::exception& e) {
+        std::cerr << "[TCP Error] " << e.what() << std::endl;
+    }
 }
-unsigned int TCPSocket::receive(std::string &out, sockaddr_in*){
-    char buf[1024];
-//    unsigned int n =recv(connFd, buf, sizeof(buf)-1, 0);
-    unsigned int n =read(connFd, buf, sizeof(buf)-1);
-    if(n>0){ buf[n]=0; out.assign(buf,n); }
-    return n;
+
+unsigned int TCPSocket::send(const std::string& msg) {
+    try {
+        return boost::asio::write(*socket, boost::asio::buffer(msg));
+    } catch (std::exception& e) {
+        std::cerr << "[TCP Send Error] " << e.what() << std::endl;
+        return 0;
+    }
+}
+
+unsigned int TCPSocket::receive(std::string& out) {
+    try {
+        char data[1024];
+        size_t len = socket->read_some(boost::asio::buffer(data));
+        out.assign(data, len);
+        std::cout << "[TCP Received] " << out << std::endl;
+        return static_cast<unsigned int>(len);
+    } catch (std::exception& e) {
+        std::cerr << "[TCP Receive Error] " << e.what() << std::endl;
+        return 0;
+    }
+}
+
+void TCPSocket::shutdown() {
+    try {
+        if (socket && socket->is_open()) {
+            socket->close();
+            std::cout << "[TCP] Socket closed.\n";
+        }
+        if (acceptor && acceptor->is_open()) {
+            acceptor->close();
+        }
+    } catch (...) {}
 }

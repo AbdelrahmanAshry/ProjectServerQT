@@ -1,97 +1,97 @@
 // server_channel.cpp
 #include "Server_Channel.h"
-#include <algorithm>
-#include <cctype>
 #include <iostream>
-#include <cstdio>
+#include <chrono>
+#include <thread>
+#include <cstdlib> // for rand()
 
-static inline std::string trim(const std::string &s) {
-    size_t b = 0;
-    while (b < s.size() && std::isspace((unsigned char)s[b])) ++b;
-    size_t e = s.size();
-    while (e > b && std::isspace((unsigned char)s[e-1])) --e;
-    return s.substr(b, e - b);
-}
+// void ServerChannel::start() {
+//     running = true;
+//     std::cout << "[ServerChannel] Starting server..." << std::endl;
+//     channelSocket->waitForConnect(8081);
+     
+// if (!channelSocket->isConnectionOriented()) {
+//     std::cout << "[ServerChannel] Waiting for message" << std::endl;
+    
+//     std::string initMsg;
+//     channelSocket->receive(initMsg);  // UDP bootstrap
+//     std::cout << "[ServerChannel] Remote endpoint set.\n";
+// }
+
+//     std::thread(&ServerChannel::communicationLoop, this).detach();
+// }
 
 void ServerChannel::start() {
-    std::cout << "[Server] Starting..." << std::endl;
-    state = RUNNING;
-    // ask the polymorphic socket to prepare for connections on bindPort
-    if (channelSocket) channelSocket->waitForConnect(bindPort);
-}
+    running = true;
+    std::cout << "[ServerChannel] Starting multi-protocol server..." << std::endl;
+    this.threshold = 50.0;
+    this.lastThreshold = this.threshold;
+    // TCP listener
+    if (tcpSocket) {
+        std::thread([this]() {
+            try {
+                tcpSocket->waitForConnect(8081);
+                std::cout << "[TCP] Client connected!\n";
+                communicationLoop(tcpSocket.get(), "TCP");
+            } catch (std::exception& e) {
+                std::cerr << "[TCP Error] " << e.what() << std::endl;
+            }
+        }).detach();
+    }
 
+    // UDP listener
+    if (udpSocket) {
+        std::thread([this]() {
+            try {
+                udpSocket->waitForConnect(8082);
+                std::cout << "[UDP] Listening for packets...\n";
+
+                std::string firstMsg;
+                udpSocket->receive(firstMsg); // waits until client sends first packet
+                std::cout << "[UDP] Initial packet: " << firstMsg << std::endl;
+
+                communicationLoop(udpSocket.get(), "UDP");
+            } catch (std::exception& e) {
+                std::cerr << "[UDP Error] " << e.what() << std::endl;
+            }
+        }).detach();
+    }
+}
 void ServerChannel::stop() {
-    std::cout << "[Server] Stopping..." << std::endl;
-    state = STOPPED;
-    if (channelSocket) channelSocket->shutdown();
+    running = false;
+    channelSocket->shutdown();
+    std::cout << "[ServerChannel] Stopped." << std::endl;
 }
 
 void ServerChannel::send(const std::string& message) {
-    if (channelSocket) channelSocket->send(message);
+    channelSocket->send(message);
 }
 
 void ServerChannel::receive() {
-    // Compatibility: call tick once to process incoming data
-    tick();
+    std::string msg;
+    channelSocket->receive(msg);
+    std::cout << "[ServerChannel] Received: " << msg << std::endl;
 }
 
-void ServerChannel::tick() {
-    if (state != RUNNING) return;
-    if (!channelSocket) return;
+void ServerChannel::communicationLoop() {
+    // Send initial threshold command
+    send("set threshold " + std::to_string(currentThreshold));
 
-    std::string in;
-    unsigned int n = channelSocket->receive(in);
-    if (n == 0) {
-        // no data available
-        return;
-    }
+    while (running) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    // Support possibly multiple lines in the buffer; split on newline
-    size_t pos = 0;
-    while (pos < in.size()) {
-        size_t nl = in.find('\n', pos);
-        std::string line;
-        if (nl == std::string::npos) {
-            line = in.substr(pos);
-            pos = in.size();
+        // Random threshold change simulation
+        if (rand() % 10 == 0) {
+            currentThreshold = 60 + rand() % 20;
+        }
+
+        if (currentThreshold != lastThreshold) {
+            send("set threshold " + std::to_string(currentThreshold));
+            lastThreshold = currentThreshold;
         } else {
-            line = in.substr(pos, nl - pos);
-            pos = nl + 1;
+            send("get temp");
         }
-        line = trim(line);
-        if (line.empty()) continue;
 
-        std::string reply = handleCommand(line);
-        if (!reply.empty()) {
-            if (reply.back() != '\n') reply.push_back('\n');
-            channelSocket->send(reply);
-        }
+        receive();
     }
-}
-
-std::string ServerChannel::handleCommand(const std::string& cmd) {
-    const std::string c = trim(cmd);
-    if (c == "CONNECT") {
-        return std::string("CONNECTED");
-    }
-
-    const std::string setPref = "SET_THRESHOLD:";
-    if (c.rfind(setPref, 0) == 0) {
-        std::string num = trim(c.substr(setPref.size()));
-        try {
-            int val = std::stoi(num);
-            threshold = val;
-            return std::string("ACK");
-        } catch (...) {
-            return std::string("ERR");
-        }
-    }
-
-    if (c == "GET_TEMP") {
-        char buf[64];
-        std::snprintf(buf, sizeof(buf), "TEMP:%.1f", lastTemp);
-        return std::string(buf);
-    }
-
-    return std::string("ERR_UNKNOWN");
 }

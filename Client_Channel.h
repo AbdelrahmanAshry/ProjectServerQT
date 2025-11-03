@@ -1,14 +1,21 @@
-// Client_Channel.h
 #pragma once
 #include "Channel.h"
-#include <iostream>
+#include <thread>
+#include <atomic>
 
 class ClientChannel : public Channel {
-public:
-    using Channel::Channel; // Inherit constructor
+private:
+    std::atomic<bool> running{false};
+    int currentThreshold = 70;
 
-    void start();
-    void stop();
-    void send(const std::string& message) ;
-    void receive();
+    void communicationLoop();
+    void handleMessage(const std::string& msg);
+
+public:
+    using Channel::Channel;//same constructors as parent
+
+    void start() override;
+    void stop() override;
+    void send(const std::string& message) override;
+    void receive() override;
 };
